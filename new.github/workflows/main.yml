@@ -1,0 +1,32 @@
+name: Telegram ASCII Bot
+
+on:
+  schedule:
+    - cron: '0 */5 * * *' # প্রতি ৫ ঘণ্টা পর অটো রিস্টার্ট হবে (গিটহাব লিমিট এড়াতে)
+  workflow_dispatch:      # ম্যানুয়ালি স্টার্ট করার অপশন
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install System Dependencies (Chafa)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chafa
+
+      - name: Install Python Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: python main.py
