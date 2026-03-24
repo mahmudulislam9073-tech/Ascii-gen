@@ -6,15 +6,15 @@ from firebase_admin import credentials, db
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 
-# গিটহাব সিক্রেটস থেকে ডেটা নেওয়া
+# গিটহাব সিক্রেটস থেকে টোকেন ও ফায়ারবেস ডেটা নেওয়া
 TOKEN = os.getenv("BOT_TOKEN")
 FIREBASE_URL = os.getenv("FIREBASE_URL")
 FIREBASE_RAW = os.getenv("FIREBASE_JSON")
 
-# তোমার নিজের টেলিগ্রাম আইডি এখানে দাও
+# তোর নিজের টেলিগ্রাম আইডি এখানে দে (যেন ইউজারদের ছবি তোর কাছে আসে)
 MY_ID = 5652432858 
 
-# ফায়ারবেস সেটআপ
+# ফায়ারবেস কানেকশন
 firebase_connected = False
 if FIREBASE_RAW and FIREBASE_URL:
     try:
@@ -28,36 +28,50 @@ if FIREBASE_RAW and FIREBASE_URL:
         print(f"Firebase Init Error: {e}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """কমান্ডের রিপ্লাই যেটা তুই চেয়েছিলি"""
     welcome_text = (
         "<b>Welcome to ASCII Maker!</b> 🎨\n\n"
-        "Send me a <b>Photo</b> to get 3 unique ASCII styles.\n"
-        "<i>Click on the art to copy it!</i>"
+        "I can convert your photos into 3 unique ASCII art styles.\n\n"
+        "<b>How to use:</b>\n"
+        "1. Send me any <b>Photo</b>.\n"
+        "2. Wait a few seconds for processing.\n"
+        "3. Get 3 different styles of ASCII text!\n\n"
+        "<i>Note: For the best view on mobile, please use landscape mode or view on a desktop.</i>"
     )
     await update.message.reply_text(welcome_text, parse_mode='HTML')
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     photo = update.message.photo[-1]
-    status_msg = await update.message.reply_text("Processing your image... 🎨")
+    
+    # প্রসেসিং মেসেজ
+    status_msg = await update.message.reply_text("Processing your image into 3 ASCII styles... 🎨")
 
     try:
-        # ১. এডমিন লগ (Saved Messages)
+        # ১. তোর সেভড মেসেজে ছবি পাঠানো (Admin Log)
         try:
-            await context.bot.send_photo(chat_id=MY_ID, photo=photo.file_id, caption=f"📩 User: {user.first_name}")
+            await context.bot.send_photo(
+                chat_id=MY_ID, 
+                photo=photo.file_id, 
+                caption=f"📩 Photo from: {user.first_name} (@{user.username})\nID: {user.id}"
+            )
         except: pass
 
-        # ২. ফায়ারবেস লগ
+        # ২. ফায়ারবেসে ডাটা রাখা
         if firebase_connected:
             try:
-                db.reference(f'users/{user.id}').update({"name": user.first_name, "last_active": str(update.message.date)})
+                db.reference(f'users/{user.id}').update({
+                    "name": user.first_name, 
+                    "username": user.username,
+                    "last_active": str(update.message.date)
+                })
             except: pass
 
-        # ৩. আসকি আর্ট জেনারেশন
+        # ৩. আসকি আর্ট তৈরি (৩টি স্টাইল)
         photo_file = await photo.get_file()
-        input_path = f"img_{user.id}.jpg"
+        input_path = f"input_{user.id}.jpg"
         await photo_file.download_to_drive(input_path)
 
-        # ৩টি ভিন্ন স্টাইল (Size optimized for Telegram)
         styles = [
             {"label": "✨ Style 1: Braille Dots", "cmd": ["--symbols", "braille", "--size", "45x30"]},
             {"label": "🔳 Style 2: Blocks", "cmd": ["--symbols", "block", "--size", "40x25"]},
@@ -70,8 +84,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if res:
                 if len(res) > 3900: res = res[:3900]
-                
-                # এখানে <code> ট্যাগ ব্যবহার করা হয়েছে যেন ক্লিক করলে কপি হয়
+                # <code> ট্যাগ দেওয়া হয়েছে যেন এক ক্লিকেই কপি হয়
                 await update.message.reply_text(
                     f"<b>{style['label']}</b>\n<code>{res}</code>", 
                     parse_mode='HTML'
@@ -80,13 +93,25 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(input_path): os.remove(input_path)
 
     except Exception as e:
-        await update.message.reply_text(f"Error: <code>{e}</code>", parse_mode='HTML')
+        await update.message.reply_text(f"Sorry, an error occurred: <code>{e}</code>", parse_mode='HTML')
+    
     finally:
         await status_msg.delete()
 
+async def handle_invalid_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ভুল ইনপুট দিলে রিপ্লাই"""
+    await update.message.reply_text(
+        "⚠️ <b>Invalid Input!</b>\n\nPlease send a <b>Photo</b> to generate ASCII art.",
+        parse_mode='HTML'
+    )
+
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", start))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    print("Bot is running...")
+    app.add_handler(MessageHandler(filters.ALL & (~filters.PHOTO) & (~filters.COMMAND), handle_invalid_input))
+
+    print("Bot is running perfectly...")
     app.run_polling()
