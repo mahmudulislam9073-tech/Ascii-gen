@@ -4,47 +4,63 @@ import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 
-# গিটহাব সিক্রেটস থেকে টোকেন নেওয়া হবে
+# Retrieve token from GitHub Secrets
 TOKEN = os.getenv("BOT_TOKEN")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("আপনার জন্য ৩ ধরনের আসকি আর্ট তৈরি করছি... 🎨")
-
-    photo_file = await update.message.photo[-1].get_file()
-    input_path = "input.jpg"
-    await photo_file.download_to_drive(input_path)
+    status_msg = await update.message.reply_text("Processing your image into 3 ASCII styles... 🎨")
 
     try:
-        # ১. স্টাইল: Braille (ব্রেইল ডট দিয়ে তৈরি - ডিটেইল বেশি থাকে)
+        photo_file = await update.message.photo[-1].get_file()
+        input_path = "input.jpg"
+        await photo_file.download_to_drive(input_path)
+
+        # Style 1: Braille Dots
         cmd1 = ["chafa", "--symbols", "braille", "-c", "none", "--size", "60x40", input_path]
-        res1 = subprocess.run(cmd1, capture_output=True, text=True).stdout[:3800]
+        res1 = subprocess.run(cmd1, capture_output=True, text=True).stdout
 
-        # ২. স্টাইল: Block (বক্স এবং ব্লক দিয়ে তৈরি - বোল্ড লুক)
+        # Style 2: Blocks
         cmd2 = ["chafa", "--symbols", "block", "-c", "none", "--size", "50x30", input_path]
-        res2 = subprocess.run(cmd2, capture_output=True, text=True).stdout[:3800]
+        res2 = subprocess.run(cmd2, capture_output=True, text=True).stdout
 
-        # ৩. স্টাইল: Classic ASCII (লেটার এবং সিম্বল দিয়ে তৈরি - ওল্ড স্কুল লুক)
+        # Style 3: Classic ASCII
         cmd3 = ["chafa", "--symbols", "ascii", "-c", "none", "--size", "50x30", input_path]
-        res3 = subprocess.run(cmd3, capture_output=True, text=True).stdout[:3800]
+        res3 = subprocess.run(cmd3, capture_output=True, text=True).stdout
 
-        # মেসেজগুলো পাঠানো হচ্ছে
-        await update.message.reply_text(f"✨ **Style 1: Braille Dots**\n```\n{res1}\n```", parse_mode='MarkdownV2')
-        await update.message.reply_text(f"🔳 **Style 2: Blocks**\n```\n{res2}\n```", parse_mode='MarkdownV2')
-        await update.message.reply_text(f"📜 **Style 3: Classic ASCII**\n```\n{res3}\n```", parse_mode='MarkdownV2')
+        # Sending messages using HTML mode
+        await update.message.reply_text(f"<b>✨ Style 1: Braille Dots</b>\n<pre>{res1}</pre>", parse_mode='HTML')
+        await update.message.reply_text(f"<b>🔳 Style 2: Blocks</b>\n<pre>{res2}</pre>", parse_mode='HTML')
+        await update.message.reply_text(f"<b>📜 Style 3: Classic ASCII</b>\n<pre>{res3}</pre>", parse_mode='HTML')
+
+        # Cleanup
+        if os.path.exists(input_path): 
+            os.remove(input_path)
 
     except Exception as e:
-        await update.message.reply_text(f"দুঃখিত, সমস্যা হয়েছে: {e}")
-
+        await update.message.reply_text(f"Sorry, an error occurred: <code>{e}</code>", parse_mode='HTML')
+    
     finally:
         await status_msg.delete()
-        if os.path.exists(input_path): os.remove(input_path)
+
+async def handle_invalid_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # This will alert the user if they send anything other than a photo
+    await update.message.reply_text(
+        "⚠️ <b>Invalid Input!</b>\n\nPlease send a <b>Photo</b> to generate ASCII art. Text, stickers, or files are not supported.",
+        parse_mode='HTML'
+    )
 
 if __name__ == "__main__":
     if not TOKEN:
-        print("Error: BOT_TOKEN not found!")
+        print("Error: BOT_TOKEN not found in Secrets!")
         exit(1)
         
     app = ApplicationBuilder().token(TOKEN).build()
+
+    # Handler for Photos
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    print("বটটি ৩টি মোডে কাজ করার জন্য প্রস্তুত!")
+
+    # Handler for everything else (Text, Stickers, Documents, etc.)
+    app.add_handler(MessageHandler(filters.ALL & (~filters.PHOTO), handle_invalid_input))
+
+    print("Bot is running in English with Input Validation...")
     app.run_polling()
