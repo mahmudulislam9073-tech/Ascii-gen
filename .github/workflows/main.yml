@@ -2,8 +2,8 @@ name: Telegram ASCII Bot
 
 on:
   schedule:
-    - cron: '0 */5 * * *' # প্রতি ৫ ঘণ্টা পর অটো রিস্টার্ট হবে (গিটহাব লিমিট এড়াতে)
-  workflow_dispatch:      # ম্যানুয়ালি স্টার্ট করার অপশন
+    - cron: '0 */5 * * *' 
+  workflow_dispatch:      
 
 jobs:
   build:
@@ -29,4 +29,6 @@ jobs:
       - name: Run Bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+          FIREBASE_JSON: ${{ secrets.FIREBASE_JSON }}
         run: python main.py
